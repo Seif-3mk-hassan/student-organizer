@@ -349,4 +349,175 @@ class Api:
         except Exception as e:
             return _err("report", str(e))
 
+    # exams
+    def createExam(self, payload: dict):
+        try: d = schemas.ExamCreate(**payload)
+        except Exception as e: return _err("validation", str(e))
+        db = SessionLocal()
+        try:
+            ex = models.Exam(**d.model_dump()); db.add(ex); db.commit(); db.refresh(ex); return _ok({"id": ex.id})
+        except Exception as e: db.rollback(); return _err("db", str(e))
+        finally: db.close()
+    def listExams(self, _=None):
+        db = SessionLocal()
+        try:
+            rows = db.query(models.Exam).order_by(models.Exam.date).all()
+            out=[]
+            for r in rows:
+                delta = (r.date.date() - datetime.now().date()).days
+                out.append({"id":r.id,"course_id":r.course_id,"title":r.title,"date":r.date.isoformat(),"location":r.location,"countdown": f"{delta}d" if delta>=0 else "past"})
+            return _ok(out)
+        finally: db.close()
+    def deleteExam(self, payload: dict):
+        db = SessionLocal()
+        try:
+            r=db.query(models.Exam).filter(models.Exam.id==payload["id"]).first()
+            if not r: return _err("not_found","exam")
+            db.delete(r); db.commit(); return _ok({})
+        except Exception as e: db.rollback(); return _err("db",str(e))
+        finally: db.close()
+
+    # tasks + pomodoro (frontend timer, just CRUD)
+    def createTask(self, payload: dict):
+        try: d = schemas.TaskCreate(**payload)
+        except Exception as e: return _err("validation",str(e))
+        db=SessionLocal()
+        try:
+            t=models.Task(**d.model_dump()); db.add(t); db.commit(); db.refresh(t); return _ok({"id":t.id})
+        except Exception as e: db.rollback(); return _err("db",str(e))
+        finally: db.close()
+    def listTasks(self, _=None):
+        db=SessionLocal()
+        try: return _ok([{"id":r.id,"title":r.title,"done":r.done,"course_id":r.course_id} for r in db.query(models.Task).all()])
+        finally: db.close()
+    def toggleTask(self, payload: dict):
+        db=SessionLocal()
+        try:
+            r=db.query(models.Task).filter(models.Task.id==payload["id"]).first()
+            if not r: return _err("not_found","task")
+            r.done = not r.done; db.commit(); return _ok({"done":r.done})
+        finally: db.close()
+    def deleteTask(self, payload: dict):
+        db=SessionLocal()
+        try:
+            r=db.query(models.Task).filter(models.Task.id==payload["id"]).first()
+            if r: db.delete(r); db.commit()
+            return _ok({})
+        finally: db.close()
+
+    # snooze/dismiss
+    def snoozeAssignment(self, payload: dict):
+        db=SessionLocal()
+        try:
+            a=db.query(models.Assignment).filter(models.Assignment.id==payload["id"]).first()
+            if not a: return _err("not_found","assignment")
+            # snooze 1 day
+            from datetime import timedelta
+            a.snoozed_until = datetime.now() + timedelta(days=1); db.commit(); return _ok({})
+        finally: db.close()
+    def dismissAssignment(self, payload: dict):
+        return self.updateAssignment({"id": payload["id"], "status":"done"})
+
+    # digest
+    def getDigest(self, _=None):
+        from datetime import timedelta
+        db=SessionLocal()
+        try:
+            today=datetime.now().date()
+            week=today+timedelta(days=7)
+            assigns=db.query(models.Assignment).filter(models.Assignment.status=="todo").all()
+            due_week=[a for a in assigns if today <= a.due_date.date() <= week]
+            exams=db.query(models.Exam).all()
+            return _ok({"due_week": len(due_week), "exams": len(exams), "tasks": db.query(models.Task).filter(models.Task.done==False).count()})
+        finally: db.close()
+
+    # holidays / academic calendar
+    def addHoliday(self, payload: dict):
+        try: d=schemas.HolidayCreate(**payload)
+        except Exception as e: return _err("validation",str(e))
+        db=SessionLocal()
+        try: h=models.Holiday(**d.model_dump()); db.add(h); db.commit(); return _ok({"id":h.id})
+        finally: db.close()
+    def listHolidays(self, _=None):
+        db=SessionLocal()
+        try: return _ok([{"id":r.id,"name":r.name,"date":r.date.isoformat()} for r in db.query(models.Holiday).order_by(models.Holiday.date).all()])
+        finally: db.close()
+
+    # global links
+    def addGlobalLink(self, payload: dict):
+        try: d=schemas.GlobalLinkCreate(**payload)
+        except Exception as e: return _err("validation",str(e))
+        db=SessionLocal()
+        try: gl=models.GlobalLink(**d.model_dump()); db.add(gl); db.commit(); return _ok({"id":gl.id})
+        finally: db.close()
+    def listGlobalLinks(self, _=None):
+        db=SessionLocal()
+        try: return _ok([{"id":r.id,"label":r.label,"url":r.url,"pinned":r.pinned} for r in db.query(models.GlobalLink).all()])
+        finally: db.close()
+    def togglePinLink(self, payload: dict):
+        db=SessionLocal()
+        try:
+            r=db.query(models.GlobalLink).filter(models.GlobalLink.id==payload["id"]).first()
+            if not r: return _err("not_found","link")
+            r.pinned=not r.pinned; db.commit(); return _ok({"pinned":r.pinned})
+        finally: db.close()
+
+    # expenses
+    def addExpense(self, payload: dict):
+        try: d=schemas.ExpenseCreate(**payload)
+        except Exception as e: return _err("validation",str(e))
+        db=SessionLocal()
+        try: ex=models.Expense(**d.model_dump()); db.add(ex); db.commit(); return _ok({"id":ex.id})
+        finally: db.close()
+    def listExpenses(self, _=None):
+        db=SessionLocal()
+        try:
+            rows=db.query(models.Expense).order_by(models.Expense.date.desc()).all()
+            total=sum(r.amount for r in rows)
+            return _ok({"items":[{"id":r.id,"title":r.title,"amount":r.amount,"date":r.date.isoformat(),"category":r.category} for r in rows],"total":total})
+        finally: db.close()
+
+    # credit progress
+    def getCreditProgress(self, _=None):
+        db=SessionLocal()
+        try:
+            done=sum(c.credits for c in db.query(models.Course).all())
+            return _ok({"done":done,"total":144,"pct": round(done/144*100,1) if 144 else 0})
+        finally: db.close()
+
+    # CSV import
+    def importCsv(self, payload: dict):
+        import csv, io
+        text=payload.get("csv","")
+        if not text.strip(): return _err("csv","empty")
+        f=io.StringIO(text)
+        reader=csv.DictReader(f)
+        db=SessionLocal()
+        try:
+            sem=db.query(models.Semester).first()
+            if not sem:
+                sem=models.Semester(name="Imported", start_date=datetime.now().date(), end_date=datetime.now().date()); db.add(sem); db.flush()
+            count=0
+            for row in reader:
+                # expect code,name,credits
+                code=row.get("code") or row.get("Code") or ""
+                name=row.get("name") or row.get("Name") or code
+                credits=int(float(row.get("credits") or row.get("Credits") or 3))
+                if not code: continue
+                db.add(models.Course(semester_id=sem.id, name=name, code=code, credits=credits))
+                count+=1
+            db.commit(); return _ok({"imported":count})
+        except Exception as e: db.rollback(); return _err("csv",str(e))
+        finally: db.close()
+
+    # files/notes helpers already exist; add list
+    def listFiles(self, payload: dict):
+        db=SessionLocal()
+        try: return _ok([{"id":r.id,"filename":r.filename,"tags":r.tags} for r in db.query(models.File).filter(models.File.course_id==payload["course_id"]).all()])
+        finally: db.close()
+    def listNotes(self, payload: dict):
+        db=SessionLocal()
+        try: return _ok([{"id":r.id,"content":r.content} for r in db.query(models.Note).filter(models.Note.course_id==payload["course_id"]).all()])
+        finally: db.close()
+
 api = Api()

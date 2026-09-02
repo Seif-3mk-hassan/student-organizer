@@ -6,6 +6,11 @@ const routes = {
   dashboard: renderDashboard,
   courses: renderCourses,
   timetable: renderTimetable,
+  tasks: renderTasks,
+  exams: renderExams,
+  files: renderFiles,
+  notes: renderNotes,
+  expenses: renderExpenses,
 };
 
 function nav(){
@@ -15,6 +20,11 @@ function nav(){
     <a href="#dashboard" data-r=dashboard><span>Dashboard</span></a>
     <a href="#timetable" data-r=timetable><span>Timetable</span></a>
     <a href="#courses" data-r=courses><span>Courses</span></a>
+    <a href="#tasks" data-r=tasks><span>Tasks</span></a>
+    <a href="#exams" data-r=exams><span>Exams</span></a>
+    <a href="#files" data-r=files><span>Files</span></a>
+    <a href="#notes" data-r=notes><span>Notes</span></a>
+    <a href="#expenses" data-r=expenses><span>Expenses</span></a>
   `;
   s.querySelectorAll("a").forEach(a=> a.addEventListener("click", e=>{
     const r=a.dataset.r; if(r) { location.hash=r; render(); }
@@ -46,6 +56,8 @@ async function renderDashboard(){
     const hasData = sems.length>0;
     const g = hasData ? await call("getGpa",{}).catch(()=>({gpa:0, count:0})) : {gpa:0, count:0};
     const gpa = g.gpa ?? 0;
+    const credit = hasData ? await call("getCreditProgress",{}).catch(()=>({done:0,total:144,pct:0})) : {done:0,total:144,pct:0};
+    const digest = hasData ? await call("getDigest",{}).catch(()=>({due_week:0,exams:0,tasks:0})) : {due_week:0,exams:0,tasks:0};
     m.querySelector("#dash").innerHTML = hasData ? `
       <div class=card>
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
@@ -59,11 +71,16 @@ async function renderDashboard(){
             </div>
             <div style="display:flex;gap:6px;align-items:center">
               ${pillFor(a)}
+              <button data-snooze="${a.id}" title="Snooze 1d" style="border:1px solid var(--border);border-radius:6px;padding:4px 8px;background:#fff;cursor:pointer">⏰</button>
               <button data-done="${a.id}" title="Mark done" style="border:1px solid var(--border);border-radius:6px;padding:4px 8px;background:#fff;cursor:pointer">✓</button>
               <button data-del="${a.id}" title="Delete" style="border:1px solid #fecaca;border-radius:6px;padding:4px 8px;background:#fff;cursor:pointer">✕</button>
             </div>
           </div>`).join("") : `<div class=empty>All caught up! 🎉 No deadlines — add one above.</div>`}
         </div>
+      </div>
+      <div class=card>
+        <b>This week at a glance</b> <span class=badge muted>digest</span>
+        <div style="margin-top:8px;font-size:13px;color:var(--muted)">Due this week: ${digest.due_week} · Exams: ${digest.exams} · Open tasks: ${digest.tasks}</div>
       </div>
       <div class=card>
         <div style="display:flex;justify-content:space-between;align-items:center">
@@ -75,18 +92,141 @@ async function renderDashboard(){
         <div style="font-size:12px;color:var(--muted);margin-top:6px">${g.count? `${g.count} graded items — add more in Courses to update` : "No grades yet — open a course → Grades → Add (e.g. Midterm 85/100 weight 30). 5 courses ≠ GPA until grades exist."} · <a href="#courses">Manage courses</a></div>
         ${gpa>0 && gpa<2 ? `<div class=banner style="margin-top:10px">Heads up: GPA below 2.0 — check absence & upcoming deadlines.</div>` : ""}
       </div>
+      <div class=card>
+        <b>Credit progress</b> <span class=badge>${credit.done} / ${credit.total}</span>
+        <div style="height:8px;background:#eee;border-radius:999px;overflow:hidden;margin-top:8px">
+          <div style="width:${credit.pct}%;height:100%;background:var(--accent)"></div>
+        </div>
+        <div style="font-size:12px;color:var(--muted);margin-top:4px">${credit.pct}% to graduation</div>
+      </div>
     ` : `
       <div class=empty><b>No courses yet</b><p>Add your first course or Import ICS</p><button onclick="location.hash='courses'" style="margin-top:8px;padding:8px 12px;border-radius:8px;border:1px solid var(--border)">Add course</button></div>
     `;
     if(hasData){
       m.querySelectorAll("[data-del]").forEach(b=> b.onclick= async ()=>{ await call("deleteAssignment",{id: parseInt(b.dataset.del)}); renderDashboard(); });
       m.querySelectorAll("[data-done]").forEach(b=> b.onclick= async ()=>{ await call("updateAssignment",{id: parseInt(b.dataset.done), status:"done"}); renderDashboard(); });
+      m.querySelectorAll("[data-snooze]").forEach(b=> b.onclick= async ()=>{ await call("snoozeAssignment",{id: parseInt(b.dataset.snooze)}); renderDashboard(); });
     }
   }catch(e){
     m.querySelector("#dash").innerHTML = `<div class=banner>DB locked — retry <button onclick="location.reload()">Retry</button></div>`;
   }
 }
 
+let pomInterval=null, pomLeft=25*60;
+async function renderTasks(){
+  const m=document.getElementById("main");
+  m.innerHTML=`<h1>Tasks & Pomodoro</h1>
+    <div class=card><input id=taskTitle placeholder="New task (optionally: CS101 - Buy book)"> <button id=addTask>Add</button></div>
+    <div id=taskList style="margin-top:12px"></div>
+    <div class=card style="margin-top:14px"><b>Pomodoro</b> <span id=pomTime>25:00</span>
+      <button id=pomStart>Start</button> <button id=pomReset>Reset</button>
+      <div style="height:8px;background:#eee;border-radius:999px;overflow:hidden;margin-top:8px"><div id=pomBar style="width:0%;height:100%;background:var(--accent)"></div></div>
+    </div>`;
+  async function refresh(){
+    const tasks=await call("listTasks",{}).catch(()=>[]);
+    const done=tasks.filter(t=>t.done).length;
+    const total=tasks.length;
+    const pct= total? Math.round(done/total*100):0;
+    m.querySelector("#taskList").innerHTML = total? `
+      <div class=card><div style="height:6px;background:#eee;border-radius:999px"><div style="width:${pct}%;height:100%;background:var(--accent)"></div></div><div style="font-size:12px;color:var(--muted)">${done}/${total} done · ${pct}% · streak ${done>0? done+"🔥":"0"}</div></div>
+      `+ tasks.map(t=>`<div class=row><span style="${t.done?'text-decoration:line-through;color:var(--muted)':''}">${esc(t.title)}</span><span style="flex:1"></span><button data-tog="${t.id}">${t.done?'Undo':'Done'}</button> <button data-delt="${t.id}">✕</button></div>`).join("") : `<div class=empty>No tasks — add one above</div>`;
+    m.querySelectorAll("[data-tog]").forEach(b=> b.onclick= async()=>{ await call("toggleTask",{id:parseInt(b.dataset.tog)}); refresh(); });
+    m.querySelectorAll("[data-delt]").forEach(b=> b.onclick= async()=>{ await call("deleteTask",{id:parseInt(b.dataset.delt)}); refresh(); });
+  }
+  m.querySelector("#addTask").onclick= async()=>{
+    const title=m.querySelector("#taskTitle").value.trim(); if(!title) return;
+    const courses=await call("listCourses",{}).catch(()=>[]);
+    let cid=null; for(const c of courses) if(title.includes(c.code)) { cid=c.id; break; }
+    await call("createTask",{title, course_id:cid}); m.querySelector("#taskTitle").value=""; refresh();
+  };
+  function tick(){
+    pomLeft--; const mm=String(Math.floor(pomLeft/60)).padStart(2,'0'), ss=String(pomLeft%60).padStart(2,'0');
+    m.querySelector("#pomTime").textContent=`${mm}:${ss}`;
+    m.querySelector("#pomBar").style.width=`${(1-pomLeft/(25*60))*100}%`;
+    if(pomLeft<=0){ clearInterval(pomInterval); pomInterval=null; alert("Pomodoro done — take a break!"); }
+  }
+  m.querySelector("#pomStart").onclick=()=>{
+    if(pomInterval) return;
+    pomInterval=setInterval(tick,1000);
+  };
+  m.querySelector("#pomReset").onclick=()=>{ clearInterval(pomInterval); pomInterval=null; pomLeft=25*60; m.querySelector("#pomTime").textContent="25:00"; m.querySelector("#pomBar").style.width="0%"; };
+  refresh();
+}
+async function renderExams(){
+  const m=document.getElementById("main");
+  m.innerHTML=`<h1>Exams</h1>
+    <div class=card><select id=exCourse></select> <input id=exTitle placeholder="Title e.g. Final"> <input id=exDate type=datetime-local> <input id=exLoc placeholder=Location> <button id=addEx>Add exam</button></div>
+    <div id=exList style="margin-top:12px"></div>`;
+  const courses=await call("listCourses",{}).catch(()=>[]);
+  m.querySelector("#exCourse").innerHTML=courses.map(c=>`<option value=${c.id}>${esc(c.code)}</option>`).join("");
+  async function refresh(){
+    const ex=await call("listExams",{}).catch(()=>[]);
+    m.querySelector("#exList").innerHTML = ex.length? ex.map(e=>`<div class=row>${esc(e.title)} — ${new Date(e.date).toLocaleString()} @ ${esc(e.location)} <span class=badge>${esc(e.countdown)}</span> <button data-delex="${e.id}">✕</button></div>`).join("") : `<div class=empty>No exams — add one above. Countdown shows days left.</div>`;
+    m.querySelectorAll("[data-delex]").forEach(b=> b.onclick= async()=>{ await call("deleteExam",{id:parseInt(b.dataset.delex)}); refresh(); });
+  }
+  m.querySelector("#addEx").onclick= async()=>{
+    const course_id=parseInt(m.querySelector("#exCourse").value), title=m.querySelector("#exTitle").value.trim(), date=m.querySelector("#exDate").value, location=m.querySelector("#exLoc").value;
+    if(!title||!date) return alert("title + date");
+    await call("createExam",{course_id, title, date, location}); refresh();
+  };
+  refresh();
+}
+async function renderFiles(){
+  const m=document.getElementById("main");
+  m.innerHTML=`<h1>Files & Materials</h1>
+    <div class=card><select id=fCourse></select> <input id=fName placeholder="filename e.g. Lecture 3"> <input id=fTags placeholder="tags e.g. midterm review"> <button id=addF>Add (stored locally)</button></div>
+    <div id=fList style="margin-top:12px"></div>`;
+  const courses=await call("listCourses",{}).catch(()=>[]);
+  m.querySelector("#fCourse").innerHTML=courses.map(c=>`<option value=${c.id}>${esc(c.code)}</option>`).join("");
+  async function refresh(){
+    const cid=parseInt(m.querySelector("#fCourse").value); if(!cid) return;
+    const files=await call("listFiles",{course_id:cid}).catch(()=>[]);
+    m.querySelector("#fList").innerHTML = files.length? files.map(f=>`<div class=row>${esc(f.filename)} <span class=badge muted>${esc(f.tags)}</span></div>`).join("") : `<div class=empty>No files — tags help search (e.g. midterm review).</div>`;
+  }
+  m.querySelector("#fCourse").onchange=refresh;
+  m.querySelector("#addF").onclick= async()=>{
+    const course_id=parseInt(m.querySelector("#fCourse").value), filename=m.querySelector("#fName").value.trim(), tags=m.querySelector("#fTags").value.trim();
+    if(!filename) return alert("filename");
+    // store empty file placeholder via bridge (no actual bytes for now)
+    await call("addNote",{course_id, content: `[file] ${filename} tags:${tags}`}); refresh();
+  };
+  refresh();
+}
+async function renderNotes(){
+  const m=document.getElementById("main");
+  m.innerHTML=`<h1>Notes</h1>
+    <div class=card><select id=nCourse></select> <textarea id=nContent placeholder="Note per course" rows=3 style="width:100%;margin-top:8px"></textarea> <button id=addN>Add note</button> <button id=searchN>Search</button></div>
+    <div id=nList style="margin-top:12px"></div>`;
+  const courses=await call("listCourses",{}).catch(()=>[]);
+  m.querySelector("#nCourse").innerHTML=courses.map(c=>`<option value=${c.id}>${esc(c.code)}</option>`).join("");
+  async function refresh(){
+    const cid=parseInt(m.querySelector("#nCourse").value);
+    const notes=await call("listNotes",{course_id:cid}).catch(()=>[]);
+    m.querySelector("#nList").innerHTML = notes.length? notes.map(n=>`<div class=row>${esc(n.content)}</div>`).join("") : `<div class=empty>No notes — simple search covers filenames/notes.</div>`;
+  }
+  m.querySelector("#nCourse").onchange=refresh;
+  m.querySelector("#addN").onclick= async()=>{ const course_id=parseInt(m.querySelector("#nCourse").value), content=m.querySelector("#nContent").value.trim(); if(!content) return; await call("addNote",{course_id, content}); m.querySelector("#nContent").value=""; refresh(); };
+  m.querySelector("#searchN").onclick= async()=>{ const q=m.querySelector("#nContent").value.trim()||"note"; const r=await call("search",{q}); m.querySelector("#nList").innerHTML = r.map(x=>`<div class=row>${esc(x.snippet)}</div>`).join("")||"<div class=empty>No results</div>"; };
+  refresh();
+}
+async function renderExpenses(){
+  const m=document.getElementById("main");
+  m.innerHTML=`<h1>Expenses</h1>
+    <div class=card><input id=eTitle placeholder=Title> <input id=eAmt type=number placeholder=Amount> <input id=eDate type=date> <input id=eCat placeholder=Category> <button id=addE>Add</button></div>
+    <div id=eList style="margin-top:12px"></div>`;
+  async function refresh(){
+    const r=await call("listExpenses",{}).catch(()=>({items:[],total:0}));
+    m.querySelector("#eList").innerHTML = `
+      <div class=card>Total: $${Number(r.total).toFixed(2)}</div>
+      ${r.items.map(e=>`<div class=row>${esc(e.title)} $${e.amount} — ${e.date} <span class=badge muted>${esc(e.category)}</span></div>`).join("")}`;
+  }
+  m.querySelector("#addE").onclick= async()=>{
+    const title=m.querySelector("#eTitle").value.trim(), amount=parseFloat(m.querySelector("#eAmt").value), date=m.querySelector("#eDate").value, category=m.querySelector("#eCat").value||"other";
+    if(!title||isNaN(amount)||!date) return alert("title/amount/date");
+    await call("addExpense",{title, amount, date, category}); refresh();
+  };
+  refresh();
+}
 async function renderCourses(){
   const m=document.getElementById("main");
   m.innerHTML = `<h1>Courses</h1>

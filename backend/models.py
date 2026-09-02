@@ -28,6 +28,7 @@ class Course(Base):
     instructor: Mapped[str] = mapped_column(String(200), default="")
     room: Mapped[str] = mapped_column(String(100), default="")
     color: Mapped[str] = mapped_column(String(20), default="forest")  # constrained 6 hues in Pydantic
+    allowed_absences: Mapped[int] = mapped_column(Integer, default=3, nullable=False)
     semester: Mapped[Semester] = relationship(back_populates="courses")
     links: Mapped[list["CourseLink"]] = relationship(back_populates="course", cascade="all, delete-orphan")
     assignments: Mapped[list["Assignment"]] = relationship(back_populates="course", cascade="all, delete-orphan")
@@ -59,6 +60,7 @@ class Assignment(Base):
     title: Mapped[str] = mapped_column(String(300), nullable=False)
     due_date: Mapped[datetime] = mapped_column(DateTime, nullable=False, index=True)
     status: Mapped[str] = mapped_column(String(20), default="todo", nullable=False)  # todo/done
+    snoozed_until: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     course: Mapped[Course] = relationship(back_populates="assignments")
     @hybrid_property
     def is_late(self) -> bool:
@@ -136,3 +138,33 @@ class Task(Base):
     due_date: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     done: Mapped[bool] = mapped_column(Boolean, default=False)
     course: Mapped[Course | None] = relationship(back_populates="tasks")
+
+class Exam(Base):
+    __tablename__ = "exams"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    course_id: Mapped[int] = mapped_column(ForeignKey("courses.id", ondelete="CASCADE"), nullable=False)
+    title: Mapped[str] = mapped_column(String(200), nullable=False)
+    date: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    location: Mapped[str] = mapped_column(String(200), default="")
+    course: Mapped[Course] = relationship()
+
+class GlobalLink(Base):
+    __tablename__ = "global_links"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    label: Mapped[str] = mapped_column(String(120), nullable=False)
+    url: Mapped[str] = mapped_column(Text, nullable=False)
+    pinned: Mapped[bool] = mapped_column(Boolean, default=False)
+
+class Expense(Base):
+    __tablename__ = "expenses"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    title: Mapped[str] = mapped_column(String(200), nullable=False)
+    amount: Mapped[float] = mapped_column(Float, nullable=False)
+    date: Mapped[date] = mapped_column(Date, nullable=False)
+    category: Mapped[str] = mapped_column(String(80), default="other")
+
+class Holiday(Base):
+    __tablename__ = "holidays"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    date: Mapped[date] = mapped_column(Date, nullable=False)

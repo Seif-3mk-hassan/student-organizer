@@ -18,10 +18,36 @@ class CourseCreate(BaseModel):
     instructor: str = ""
     room: str = ""
     color: ColorHue = "forest"
+    allowed_absences: int = 3
     @field_validator("credits")
     def _credits(cls, v):
         if v <= 0: raise ValueError("credits > 0")
         return v
+
+class ExamCreate(BaseModel):
+    course_id: int
+    title: str
+    date: datetime
+    location: str = ""
+
+class GlobalLinkCreate(BaseModel):
+    label: str
+    url: str
+    pinned: bool = False
+    @field_validator("url")
+    def _url(cls, v):
+        if not v.startswith(("https://","http://")): raise ValueError("url must be http(s)")
+        return v
+
+class ExpenseCreate(BaseModel):
+    title: str
+    amount: float
+    date: date
+    category: str = "other"
+
+class HolidayCreate(BaseModel):
+    name: str
+    date: date
 
 class CourseLinkCreate(BaseModel):
     course_id: int
