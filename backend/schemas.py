@@ -1,6 +1,6 @@
 from datetime import date, datetime, time
 from typing import Optional, Literal
-from pydantic import BaseModel, field_validator, HttpUrl
+from pydantic import BaseModel, field_validator
 
 ColorHue = Literal["forest","rust","ink","amber","slate","plum"]
 
@@ -19,7 +19,7 @@ class CourseCreate(BaseModel):
     room: str = ""
     color: ColorHue = "forest"
     @field_validator("credits")
-    def _credits(cls, v): 
+    def _credits(cls, v):
         if v <= 0: raise ValueError("credits > 0")
         return v
 
@@ -58,6 +58,15 @@ class GradeCreate(BaseModel):
     score: float
     max_score: float
 
+class AttendanceCreate(BaseModel):
+    course_id: int
+    date: date
+    status: Literal["present","absent","excused"]
+
+class NoteCreate(BaseModel):
+    course_id: int
+    content: str
+
 class FileCreate(BaseModel):
     course_id: int
     filename: str
@@ -68,6 +77,5 @@ class TaskCreate(BaseModel):
     title: str
     due_date: Optional[datetime] = None
 
-# quick-add parse helper schema
 class QuickAddRequest(BaseModel):
-    text: str  # e.g. "CS101 HW3 due Friday"
+    text: str

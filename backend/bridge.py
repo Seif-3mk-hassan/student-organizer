@@ -147,4 +147,79 @@ class Api:
         except Exception as e:
             return _err("backup", str(e))
 
+    # attendance / links / notes
+    def markAttendance(self, payload: dict):
+        try: d = schemas.AttendanceCreate(**payload)
+        except Exception as e: return _err("validation", str(e))
+        db = SessionLocal()
+        try:
+            a = models.Attendance(**d.model_dump()); db.add(a); db.commit(); db.refresh(a)
+            return _ok({"id": a.id})
+        except Exception as e:
+            db.rollback(); return _err("db", str(e), "date" if "uq_attendance" in str(e) else None)
+        finally: db.close()
+
+    def addLink(self, payload: dict):
+        try: d = schemas.CourseLinkCreate(**payload)
+        except Exception as e: return _err("validation", str(e))
+        db = SessionLocal()
+        try:
+            l = models.CourseLink(**d.model_dump()); db.add(l); db.commit(); db.refresh(l)
+            return _ok({"id": l.id})
+        except Exception as e:
+            db.rollback(); return _err("db", str(e))
+        finally: db.close()
+
+    def listLinks(self, payload: dict):
+        db = SessionLocal()
+        try:
+            rows = db.query(models.CourseLink).filter(models.CourseLink.course_id == payload["course_id"]).all()
+            return _ok([{"id": r.id, "label": r.label, "url": r.url} for r in rows])
+        finally: db.close()
+
+    def addNote(self, payload: dict):
+        try: d = schemas.NoteCreate(**payload)
+        except Exception as e: return _err("validation", str(e))
+        db = SessionLocal()
+        try:
+            n = models.Note(**d.model_dump()); db.add(n); db.commit(); db.refresh(n)
+            init_fts(); index_item("note", n.id, n.content)
+            return _ok({"id": n.id})
+        except Exception as e:
+            db.rollback(); return _err("db", str(e))
+        finally: db.close()
+
+    def exportIcs(self, payload: dict | None = None):
+        from .services.ics import export_ics
+        db = SessionLocal()
+        try:
+            assigns = [{"title": r.title, "due_date": r.due_date, "course_id": r.course_id} for r in db.query(models.Assignment).all()]
+            slots = []  # timetable not needed for export v1
+            data = export_ics(assigns, slots)
+            return _ok({"ics": data.decode()})
+        finally: db.close()
+
+    def importIcs(self, payload: dict):
+        from .services.ics import parse_ics
+        raw = payload.get("ics","").encode() if isinstance(payload.get("ics"), str) else payload.get("data", b"")
+        try:
+            items = parse_ics(raw)
+        except Exception as e:
+            return _err("ics", str(e))
+        # transactional: create assignments for first course or need course_id
+        db = SessionLocal()
+        try:
+            course_id = payload.get("course_id")
+            if not course_id:
+                c = db.query(models.Course).first()
+                if not c: return _err("ics", "create a course first to import into")
+                course_id = c.id
+            for it in items:
+                db.add(models.Assignment(course_id=course_id, title=it["title"], due_date=it["due_date"], status="todo"))
+            db.commit()
+            return _ok({"imported": len(items)})
+        except Exception as e:
+            db.rollback(); return _err("db", str(e))
+        finally: db.close()
+
 api = Api()
