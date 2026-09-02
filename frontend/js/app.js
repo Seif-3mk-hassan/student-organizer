@@ -23,8 +23,9 @@ function nav(){
 
 function esc(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
 function pillFor(a){
-  const d=new Date(a.due), today=new Date(); today.setHours(0,0,0,0);
-  const diff=Math.round((d - today)/86400000);
+  const d=new Date(a.due); d.setHours(0,0,0,0);
+  const today=new Date(); today.setHours(0,0,0,0);
+  const diff=Math.floor((d - today)/86400000);
   if(a.late) return `<span class=badge>late</span>`;
   if(diff===0) return `<span class="badge ok">today</span>`;
   if(diff===1) return `<span class=badge>tomorrow</span>`;

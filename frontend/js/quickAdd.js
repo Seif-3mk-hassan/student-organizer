@@ -1,7 +1,9 @@
 import {call} from "./bridge.js";
+let _qaBound = false;
 export function initQuickAdd(){
   const main=document.getElementById("main");
   if(!main || document.getElementById("quickAdd")) return;
+  if(_qaBound) return; _qaBound = true;
   const bar=document.createElement("div");
   bar.id="quickAdd"; bar.innerHTML=`<input id=qa placeholder="Add CS101 HW3 due Friday — press Enter"> <small style="color:var(--muted)">Enter to add · N to focus</small>`;
   main.prepend(bar);
