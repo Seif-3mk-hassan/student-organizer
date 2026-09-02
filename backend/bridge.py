@@ -97,9 +97,18 @@ class Api:
         try:
             a = db.query(models.Assignment).filter(models.Assignment.id == payload["id"]).first()
             if not a: return _err("not_found", "assignment not found")
-            if "title" in payload: a.title = payload["title"]
-            if "due_date" in payload: a.due_date = payload["due_date"]
-            if "status" in payload: a.status = payload["status"]
+            if "title" in payload:
+                t = payload["title"]
+                if not t or len(t) > 300: return _err("validation", "title 1-300", "title")
+                a.title = t
+            if "due_date" in payload:
+                try:
+                    a.due_date = datetime.fromisoformat(str(payload["due_date"]).replace("Z","+00:00"))
+                except Exception:
+                    return _err("validation", "due_date must be ISO datetime", "due_date")
+            if "status" in payload:
+                if payload["status"] not in ("todo","done"): return _err("validation", "status todo/done", "status")
+                a.status = payload["status"]
             db.commit(); return _ok({})
         except Exception as e:
             db.rollback(); return _err("db", str(e))
@@ -144,6 +153,8 @@ class Api:
         try:
             g = models.Grade(**d.model_dump()); db.add(g); db.commit(); db.refresh(g)
             return _ok({"id": g.id})
+        except Exception as e:
+            db.rollback(); return _err("db", str(e))
         finally: db.close()
 
     def getGpa(self, payload: dict):

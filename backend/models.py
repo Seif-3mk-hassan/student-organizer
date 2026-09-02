@@ -62,11 +62,11 @@ class Assignment(Base):
     course: Mapped[Course] = relationship(back_populates="assignments")
     @hybrid_property
     def is_late(self) -> bool:
-        # end-of-day grace: due date's day is not late until next midnight
+        # end-of-day grace, local time (not UTC) to match frontend pillFor
         if self.status != "todo":
             return False
         # compare date only — assignment due today is not late until tomorrow
-        return self.due_date.date() < datetime.utcnow().date()
+        return self.due_date.date() < datetime.now().date()
     __table_args__ = (Index("ix_assignments_due_status", "due_date", "status"), Index("ix_assignments_course", "course_id"))
 
 class TimetableSlot(Base):
