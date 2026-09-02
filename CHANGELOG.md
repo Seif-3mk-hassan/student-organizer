@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.2.0] - 2026-09-02
+
+### Added
+- App scaffold: DB (platformdirs + WAL + Alembic + CHECKs), timetable_slots rename, 5 indexes + overlap guard
+- Typed JS Bridge window.pywebview.api + wrapper {ok,error} + file jail materials/<course>/<uuid>
+- FTS5 + palette Ctrl+K / / + quick-add N / CS101 HW3 due Friday parser
+- Design system: tokens, sidebar 240->56, 5-state warm empties, 6 hues, 44px/kbd, DESIGN.md
+- ICS import/export (5MB cap, transactional), attendance/links/notes, backup snapshot zip, one-dir + CI Win+Linux
+- Notifications windows-toasts/notifypy + APScheduler stub, 6 test suites (gpa/bridge/files/ics/search/backup)
+
+### Changed
+- Spec bridge now implemented — pywebview HTML shell loads frontend/js/app.js
+
 ## [0.1.0] - 2026-09-02
 
 ### Added
@@ -12,7 +25,3 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 - Spec now {ok,error} typed bridge contract (window.pywebview.api) — replaces threaded FastAPI thread
-
-### Notes
-- No application code yet — this is the plan checkpoint. Next: T1-T9 + design tokens implementation on same branch.
-
