@@ -39,6 +39,32 @@ def _set_sqlite_pragma(dbapi_conn, _):
     cur.execute("PRAGMA foreign_keys=ON;")
     cur.close()
 
+# auto-migrate missing columns/tables for existing DBs (no Alembic run needed)
+def _auto_migrate():
+    import sqlite3
+    db_path = get_db_path()
+    if not db_path.exists():
+        return
+    try:
+        conn = sqlite3.connect(str(db_path))
+        cur = conn.cursor()
+        # courses.allowed_absences
+        cur.execute("PRAGMA table_info(courses)")
+        cols = {r[1] for r in cur.fetchall()}
+        if "allowed_absences" not in cols:
+            cur.execute("ALTER TABLE courses ADD COLUMN allowed_absences INTEGER DEFAULT 3 NOT NULL")
+        # assignments.snoozed_until
+        cur.execute("PRAGMA table_info(assignments)")
+        cols = {r[1] for r in cur.fetchall()}
+        if "snoozed_until" not in cols:
+            cur.execute("ALTER TABLE assignments ADD COLUMN snoozed_until DATETIME")
+        conn.commit()
+        conn.close()
+    except Exception:
+        pass
+
+_auto_migrate()
+
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 
 def get_db():
