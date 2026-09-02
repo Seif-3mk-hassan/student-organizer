@@ -222,4 +222,48 @@ class Api:
             db.rollback(); return _err("db", str(e))
         finally: db.close()
 
+    def previewCarryOver(self, payload: dict):
+        """Dry-run CEO D3.4 — what would copy from semester src -> dst name."""
+        src_id = payload.get("semester_id")
+        db = SessionLocal()
+        try:
+            src = db.query(models.Semester).filter(models.Semester.id == src_id).first()
+            if not src: return _err("semester", "not found")
+            courses = db.query(models.Course).filter(models.Course.semester_id == src_id).all()
+            slots = sum(len(c.timetable_slots) for c in courses)
+            assigns = sum(len(c.assignments) for c in courses)
+            return _ok({"courses": len(courses), "slots": slots, "assignments": assigns, "would_copy": [c.code for c in courses]})
+        finally: db.close()
+
+    def carryOver(self, payload: dict):
+        src_id = payload.get("semester_id"); new_name = payload.get("new_name")
+        only_codes = set(payload.get("codes") or [])
+        db = SessionLocal()
+        try:
+            src = db.query(models.Semester).filter(models.Semester.id == src_id).first()
+            if not src: return _err("semester", "not found")
+            dst = models.Semester(name=new_name or f"{src.name} (copy)", start_date=src.start_date, end_date=src.end_date)
+            db.add(dst); db.flush()
+            for c in db.query(models.Course).filter(models.Course.semester_id == src_id).all():
+                if only_codes and c.code not in only_codes: continue
+                nc = models.Course(semester_id=dst.id, name=c.name, code=c.code, credits=c.credits, instructor=c.instructor, room=c.room, color=c.color)
+                db.add(nc); db.flush()
+                for s in c.timetable_slots:
+                    db.add(models.TimetableSlot(course_id=nc.id, day_of_week=s.day_of_week, start_time=s.start_time, end_time=s.end_time, room=s.room))
+                for a in c.assignments:
+                    db.add(models.Assignment(course_id=nc.id, title=a.title, due_date=a.due_date, status="todo"))
+            db.commit()
+            return _ok({"new_semester_id": dst.id})
+        except Exception as e:
+            db.rollback(); return _err("db", str(e))
+        finally: db.close()
+
+    def reportBug(self, _=None):
+        from .services.logger import report_zip
+        try:
+            z = report_zip()
+            return _ok({"size": len(z)})
+        except Exception as e:
+            return _err("report", str(e))
+
 api = Api()
