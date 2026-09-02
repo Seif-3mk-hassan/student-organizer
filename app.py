@@ -10,28 +10,16 @@ try:
     init_fts()
 except: pass
 
-html = """
-<!doctype html>
-<meta charset=utf-8>
-<meta name=viewport content="width=device-width,initial-scale=1">
-<link rel=stylesheet href="frontend/css/tokens.css">
-<link rel=stylesheet href="frontend/css/app.css">
-<div id=app>
-  <nav id=sidebar></nav>
-  <main id=main></main>
-</div>
-<div id=palette hidden></div>
-<script type=module src="frontend/js/app.js"></script>
-"""
-
 class Bridge:
     pass
 
-# expose api methods to JS via pywebview api object
-# webview expects an object instance; we delegate to api
 def create_window():
-    b = api  # direct
-    w = webview.create_window("Student Organizer", html=html, js_api=b, width=1120, height=720, min_size=(1024,640))
+    from pathlib import Path
+    b = api
+    # use file URL so relative css/js resolve (html string cannot resolve frontend/ paths)
+    entry = Path(__file__).parent / "frontend" / "index.html"
+    url = entry.resolve().as_uri()
+    w = webview.create_window("Student Organizer", url=url, js_api=b, width=1120, height=720, min_size=(1024,640))
     webview.start(debug=True)
 
 if __name__ == "__main__":
