@@ -2,6 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.2.1] - 2026-09-02
+
+### Fixed
+- White window — create frontend/index.html and load via file:// URL so pywebview resolves css/js (app.py html string could not)
 ## [0.2.0] - 2026-09-02
 
 ### Added
