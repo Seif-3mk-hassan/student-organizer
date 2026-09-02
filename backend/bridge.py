@@ -58,6 +58,17 @@ class Api:
             return _ok([{"id": r.id, "code": r.code, "name": r.name, "color": r.color, "credits": r.credits} for r in rows])
         finally: db.close()
 
+    def deleteCourse(self, payload: dict):
+        db = SessionLocal()
+        try:
+            c = db.query(models.Course).filter(models.Course.id == payload["id"]).first()
+            if not c: return _err("not_found", "course not found")
+            db.delete(c); db.commit()
+            return _ok({})
+        except Exception as e:
+            db.rollback(); return _err("db", str(e))
+        finally: db.close()
+
     # assignments — thin wrapper, due_date iso
     def createAssignment(self, payload: dict):
         try: d = schemas.AssignmentCreate(**payload)
@@ -78,7 +89,30 @@ class Api:
             q = db.query(models.Assignment)
             if payload and payload.get("course_id"): q = q.filter(models.Assignment.course_id == payload["course_id"])
             rows = q.order_by(models.Assignment.due_date).all()
-            return _ok([{"id": r.id, "title": r.title, "due": r.due_date.isoformat(), "status": r.status, "late": r.is_late} for r in rows])
+            return _ok([{"id": r.id, "title": r.title, "due": r.due_date.isoformat(), "status": r.status, "late": r.is_late, "course_id": r.course_id} for r in rows])
+        finally: db.close()
+
+    def updateAssignment(self, payload: dict):
+        db = SessionLocal()
+        try:
+            a = db.query(models.Assignment).filter(models.Assignment.id == payload["id"]).first()
+            if not a: return _err("not_found", "assignment not found")
+            if "title" in payload: a.title = payload["title"]
+            if "due_date" in payload: a.due_date = payload["due_date"]
+            if "status" in payload: a.status = payload["status"]
+            db.commit(); return _ok({})
+        except Exception as e:
+            db.rollback(); return _err("db", str(e))
+        finally: db.close()
+
+    def deleteAssignment(self, payload: dict):
+        db = SessionLocal()
+        try:
+            a = db.query(models.Assignment).filter(models.Assignment.id == payload["id"]).first()
+            if not a: return _err("not_found", "assignment not found")
+            db.delete(a); db.commit(); return _ok({})
+        except Exception as e:
+            db.rollback(); return _err("db", str(e))
         finally: db.close()
 
     # timetable with overlap guard
@@ -121,6 +155,23 @@ class Api:
             rows = q.all()
             data = [{"weight": r.weight, "score": r.score, "max_score": r.max_score} for r in rows]
             return _ok({"gpa": gpa_svc.compute_gpa(data), "count": len(data)})
+        finally: db.close()
+
+    def listGrades(self, payload: dict):
+        db = SessionLocal()
+        try:
+            rows = db.query(models.Grade).filter(models.Grade.course_id == payload["course_id"]).all()
+            return _ok([{"id": r.id, "item": r.item_name, "weight": r.weight, "score": r.score, "max": r.max_score} for r in rows])
+        finally: db.close()
+
+    def deleteGrade(self, payload: dict):
+        db = SessionLocal()
+        try:
+            r = db.query(models.Grade).filter(models.Grade.id == payload["id"]).first()
+            if not r: return _err("not_found","grade not found")
+            db.delete(r); db.commit(); return _ok({})
+        except Exception as e:
+            db.rollback(); return _err("db", str(e))
         finally: db.close()
 
     # search + quick-add

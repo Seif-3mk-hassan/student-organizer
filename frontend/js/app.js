@@ -49,13 +49,17 @@ async function renderDashboard(){
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
           <b>Due next</b><span class=badge muted>${todo.length} todo</span>
         </div>
-        <div>${todo.length? todo.slice(0,6).map(a=>`
+        <div>${todo.length? todo.slice(0,8).map(a=>`
           <div class=row>
-            <div style="min-width:0">
+            <div style="min-width:0;flex:1">
               <div style="font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${a.title}</div>
-              <div style="font-size:13px;color:var(--muted)">${new Date(a.due).toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})}</div>
+              <div style="font-size:13px;color:var(--muted)">${new Date(a.due).toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})} · <a href="#" data-cid="${a.course_id}" style="font-size:12px">view</a></div>
             </div>
-            ${pillFor(a)}
+            <div style="display:flex;gap:6px;align-items:center">
+              ${pillFor(a)}
+              <button data-done="${a.id}" title="Mark done" style="border:1px solid var(--border);border-radius:6px;padding:4px 8px;background:#fff;cursor:pointer">✓</button>
+              <button data-del="${a.id}" title="Delete" style="border:1px solid #fecaca;border-radius:6px;padding:4px 8px;background:#fff;cursor:pointer">✕</button>
+            </div>
           </div>`).join("") : `<div class=empty>All caught up! 🎉 No deadlines — add one above.</div>`}
         </div>
       </div>
@@ -66,12 +70,16 @@ async function renderDashboard(){
         <div style="height:8px;background:#eee;border-radius:999px;overflow:hidden;margin-top:10px">
           <div style="width:${Math.min(100, (gpa/4)*100)}%;height:100%;background:${gpaColor(gpa)}"></div>
         </div>
-        <div style="font-size:12px;color:var(--muted);margin-top:6px">${g.count? `${g.count} graded items` : "Add grades in Courses → Grades to see GPA"} · <a href="#courses">Manage</a></div>
+        <div style="font-size:12px;color:var(--muted);margin-top:6px">${g.count? `${g.count} graded items — add more in Courses to update` : "No grades yet — open a course → Grades → Add (e.g. Midterm 85/100 weight 30). 5 courses ≠ GPA until grades exist."} · <a href="#courses">Manage courses</a></div>
         ${gpa>0 && gpa<2 ? `<div class=banner style="margin-top:10px">Heads up: GPA below 2.0 — check absence & upcoming deadlines.</div>` : ""}
       </div>
     ` : `
       <div class=empty><b>No courses yet</b><p>Add your first course or Import ICS</p><button onclick="location.hash='courses'" style="margin-top:8px;padding:8px 12px;border-radius:8px;border:1px solid var(--border)">Add course</button></div>
     `;
+    if(hasData){
+      m.querySelectorAll("[data-del]").forEach(b=> b.onclick= async ()=>{ await call("deleteAssignment",{id: parseInt(b.dataset.del)}); renderDashboard(); });
+      m.querySelectorAll("[data-done]").forEach(b=> b.onclick= async ()=>{ await call("updateAssignment",{id: parseInt(b.dataset.done), status:"done"}); renderDashboard(); });
+    }
   }catch(e){
     m.querySelector("#dash").innerHTML = `<div class=banner>DB locked — retry <button onclick="location.reload()">Retry</button></div>`;
   }
@@ -90,7 +98,30 @@ async function renderCourses(){
       sid=r.id;
     }
     const cs=await call("listCourses",{semester_id:sid});
-    document.getElementById("list").innerHTML = cs.length? cs.map(c=>`<div class=row><span class=dot style=background:var(--accent)></span> ${c.code} — ${c.name} (${c.credits})</div>`).join("") : `<div class=empty>No courses yet — add one above</div>`;
+    document.getElementById("list").innerHTML = cs.length? cs.map(c=>`
+      <div class=row style="flex-wrap:wrap;gap:8px">
+        <span class=dot style=background:var(--accent)></span> <b>${c.code}</b> — ${c.name} (${c.credits} cr)
+        <span style="flex:1"></span>
+        <input id="g-${c.id}-name" placeholder="Item e.g. Midterm" style="width:130px;padding:6px;border:1px solid var(--border);border-radius:6px">
+        <input id="g-${c.id}-score" type=number placeholder="85" style="width:60px;padding:6px;border:1px solid var(--border);border-radius:6px">
+        <span>/</span><input id="g-${c.id}-max" type=number placeholder="100" style="width:60px;padding:6px;border:1px solid var(--border);border-radius:6px">
+        <input id="g-${c.id}-w" type=number placeholder="wt 30" style="width:60px;padding:6px;border:1px solid var(--border);border-radius:6px">
+        <button data-addg="${c.id}" style="padding:6px 10px;border:1px solid var(--accent);background:var(--accent);color:#fff;border-radius:6px;cursor:pointer">Add grade</button>
+        <button data-delc="${c.id}" style="padding:6px 10px;border:1px solid #fecaca;background:#fff;border-radius:6px;cursor:pointer">Delete course</button>
+        <button data-gpa="${c.id}" style="padding:6px 10px;border:1px solid var(--border);background:#fff;border-radius:6px;cursor:pointer">GPA</button>
+        <span id="gpa-${c.id}" style="font-size:12px;color:var(--muted)"></span>
+      </div>`).join("") : `<div class=empty>No courses yet — add one above</div>`;
+    document.querySelectorAll("[data-addg]").forEach(b=> b.onclick = async ()=>{
+      const id=b.dataset.addg;
+      const item=document.getElementById(`g-${id}-name`).value.trim(), score=parseFloat(document.getElementById(`g-${id}-score`).value), max=parseFloat(document.getElementById(`g-${id}-max`).value), w=parseFloat(document.getElementById(`g-${id}-w`).value);
+      if(!item||isNaN(score)||isNaN(max)||isNaN(w)) return alert("Fill item, score, max, weight");
+      try{ await call("addGrade",{course_id:parseInt(id), item_name:item, score, max_score:max, weight:w}); alert("Grade added — dashboard GPA will update"); }catch(e){ alert(e.message); }
+    });
+    document.querySelectorAll("[data-delc]").forEach(b=> b.onclick = async ()=>{ if(!confirm("Delete course and its assignments/grades?")) return; await call("deleteCourse",{id: parseInt(b.dataset.delc)}); refresh(); });
+    document.querySelectorAll("[data-gpa]").forEach(b=> b.onclick = async ()=>{
+      const r=await call("getGpa",{course_id: parseInt(b.dataset.gpa)});
+      document.getElementById(`gpa-${b.dataset.gpa}`).textContent = ` GPA ${Number(r.gpa).toFixed(2)} (${r.count})`;
+    });
     document.getElementById("addC").onclick = async ()=>{
       const code=document.getElementById("cc").value.trim(), name=document.getElementById("cn").value.trim(), credits=parseInt(document.getElementById("cr").value||"3");
       if(!code||!name) return alert("code + name required");
