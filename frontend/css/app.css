@@ -3,7 +3,8 @@
 #sidebar a{display:flex;gap:8px;align-items:center;padding:10px 12px;border-radius:var(--radius);text-decoration:none;color:var(--text);margin-bottom:4px}
 #sidebar a.active{background:var(--accent);color:#fff}
 #main{flex:1;padding:28px;max-width:980px;background:linear-gradient(180deg, #faf9f6 0, #f3f1ee 100%)}
-h1{font-size:28px;margin:8px 0 16px}
+h1{font-size:28px;margin:8px 0 16px;text-wrap:balance}
+a:focus-visible, button:focus-visible, input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .card{border:1px solid var(--border);border-radius:14px;padding:16px 18px;background:var(--surface);box-shadow:0 1px 6px rgba(0,0,0,.04)}
 .card + .card{margin-top:14px}
 .row{display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #f0ede8;padding:12px 0}

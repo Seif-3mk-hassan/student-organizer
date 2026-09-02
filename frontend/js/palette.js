@@ -4,10 +4,14 @@ export function initPalette(){
   if(!el) return;
   function esc(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
   function open(){ el.hidden=false; el.innerHTML=`<input id=palInput placeholder="Type command or search…"> <div id=palOut></div>`; el.querySelector("#palInput").focus();
-    el.querySelector("#palInput").addEventListener("input", async e=>{
-      const q=e.target.value.trim();
-      if(q.length<2) return;
-      try{ const r=await call("search",{q}); document.getElementById("palOut").innerHTML=r.map(x=>`<div>${esc(x.kind)}: ${esc(x.snippet)}</div>`).join("") }catch{}
+    let t=null;
+    el.querySelector("#palInput").addEventListener("input", e=>{
+      clearTimeout(t);
+      t=setTimeout(async ()=>{
+        const q=e.target.value.trim();
+        if(q.length<2) return;
+        try{ const r=await call("search",{q}); document.getElementById("palOut").innerHTML=r.map(x=>`<div>${esc(x.kind)}: ${esc(x.snippet)}</div>`).join("") }catch{}
+      }, 200);
     });
   }
   document.addEventListener("keydown", e=>{
