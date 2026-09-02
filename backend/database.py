@@ -41,10 +41,11 @@ def _set_sqlite_pragma(dbapi_conn, _):
 
 # auto-migrate missing columns/tables for existing DBs (no Alembic run needed)
 def _auto_migrate():
-    import sqlite3
+    import sqlite3, logging
     db_path = get_db_path()
     if not db_path.exists():
         return
+    conn = None
     try:
         conn = sqlite3.connect(str(db_path))
         cur = conn.cursor()
@@ -52,16 +53,24 @@ def _auto_migrate():
         cur.execute("PRAGMA table_info(courses)")
         cols = {r[1] for r in cur.fetchall()}
         if "allowed_absences" not in cols:
-            cur.execute("ALTER TABLE courses ADD COLUMN allowed_absences INTEGER DEFAULT 3 NOT NULL")
+            cur.execute("ALTER TABLE courses ADD COLUMN allowed_absences INTEGER NOT NULL DEFAULT 3")
         # assignments.snoozed_until
         cur.execute("PRAGMA table_info(assignments)")
         cols = {r[1] for r in cur.fetchall()}
         if "snoozed_until" not in cols:
             cur.execute("ALTER TABLE assignments ADD COLUMN snoozed_until DATETIME")
+        # new tables from models (Base) — create if missing (Alembic no-ops)
+        cur.execute("CREATE TABLE IF NOT EXISTS exams (id INTEGER PRIMARY KEY, course_id INTEGER NOT NULL, title VARCHAR(200) NOT NULL, date DATETIME NOT NULL, location VARCHAR(200) DEFAULT '', FOREIGN KEY(course_id) REFERENCES courses(id) ON DELETE CASCADE)")
+        cur.execute("CREATE TABLE IF NOT EXISTS global_links (id INTEGER PRIMARY KEY, label VARCHAR(120) NOT NULL, url TEXT NOT NULL, pinned BOOLEAN DEFAULT 0)")
+        cur.execute("CREATE TABLE IF NOT EXISTS expenses (id INTEGER PRIMARY KEY, title VARCHAR(200) NOT NULL, amount FLOAT NOT NULL, date DATE NOT NULL, category VARCHAR(80) DEFAULT 'other')")
+        cur.execute("CREATE TABLE IF NOT EXISTS holidays (id INTEGER PRIMARY KEY, name VARCHAR(200) NOT NULL, date DATE NOT NULL)")
         conn.commit()
-        conn.close()
-    except Exception:
-        pass
+    except Exception as e:
+        logging.getLogger("app").warning(f"auto_migrate failed: {e}")
+    finally:
+        try:
+            if conn: conn.close()
+        except: pass
 
 _auto_migrate()
 

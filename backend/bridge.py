@@ -88,6 +88,8 @@ class Api:
         try:
             q = db.query(models.Assignment)
             if payload and payload.get("course_id"): q = q.filter(models.Assignment.course_id == payload["course_id"])
+            # snoozed items hidden until snoozed_until passes
+            q = q.filter((models.Assignment.snoozed_until == None) | (models.Assignment.snoozed_until < datetime.now()))  # type: ignore
             rows = q.order_by(models.Assignment.due_date).all()
             return _ok([{"id": r.id, "title": r.title, "due": r.due_date.isoformat(), "status": r.status, "late": r.is_late, "course_id": r.course_id} for r in rows])
         finally: db.close()
@@ -369,9 +371,11 @@ class Api:
             return _ok(out)
         finally: db.close()
     def deleteExam(self, payload: dict):
+        _id = payload.get("id")
+        if not _id: return _err("validation","id required","id")
         db = SessionLocal()
         try:
-            r=db.query(models.Exam).filter(models.Exam.id==payload["id"]).first()
+            r=db.query(models.Exam).filter(models.Exam.id==_id).first()
             if not r: return _err("not_found","exam")
             db.delete(r); db.commit(); return _ok({})
         except Exception as e: db.rollback(); return _err("db",str(e))
@@ -391,29 +395,39 @@ class Api:
         try: return _ok([{"id":r.id,"title":r.title,"done":r.done,"course_id":r.course_id} for r in db.query(models.Task).all()])
         finally: db.close()
     def toggleTask(self, payload: dict):
+        _id = payload.get("id")
+        if not _id: return _err("validation","id required","id")
         db=SessionLocal()
         try:
-            r=db.query(models.Task).filter(models.Task.id==payload["id"]).first()
+            r=db.query(models.Task).filter(models.Task.id==_id).first()
             if not r: return _err("not_found","task")
             r.done = not r.done; db.commit(); return _ok({"done":r.done})
+        except Exception as e: db.rollback(); return _err("db", str(e))
         finally: db.close()
     def deleteTask(self, payload: dict):
+        _id = payload.get("id")
+        if not _id: return _err("validation","id required","id")
         db=SessionLocal()
         try:
-            r=db.query(models.Task).filter(models.Task.id==payload["id"]).first()
-            if r: db.delete(r); db.commit()
+            r=db.query(models.Task).filter(models.Task.id==_id).first()
+            if not r: return _err("not_found","task")
+            db.delete(r); db.commit()
             return _ok({})
+        except Exception as e: db.rollback(); return _err("db", str(e))
         finally: db.close()
 
     # snooze/dismiss
     def snoozeAssignment(self, payload: dict):
+        _id = payload.get("id")
+        if not _id: return _err("validation","id required","id")
         db=SessionLocal()
         try:
-            a=db.query(models.Assignment).filter(models.Assignment.id==payload["id"]).first()
+            a=db.query(models.Assignment).filter(models.Assignment.id==_id).first()
             if not a: return _err("not_found","assignment")
             # snooze 1 day
             from datetime import timedelta
             a.snoozed_until = datetime.now() + timedelta(days=1); db.commit(); return _ok({})
+        except Exception as e: db.rollback(); return _err("db", str(e))
         finally: db.close()
     def dismissAssignment(self, payload: dict):
         return self.updateAssignment({"id": payload["id"], "status":"done"})
@@ -425,10 +439,15 @@ class Api:
         try:
             today=datetime.now().date()
             week=today+timedelta(days=7)
-            assigns=db.query(models.Assignment).filter(models.Assignment.status=="todo").all()
-            due_week=[a for a in assigns if today <= a.due_date.date() <= week]
-            exams=db.query(models.Exam).all()
-            return _ok({"due_week": len(due_week), "exams": len(exams), "tasks": db.query(models.Task).filter(models.Task.done==False).count()})
+            # push due filter to SQL + exclude snoozed
+            due_week=db.query(models.Assignment).filter(
+                models.Assignment.status=="todo",
+                models.Assignment.due_date >= datetime.combine(today, datetime.min.time()),
+                models.Assignment.due_date <= datetime.combine(week, datetime.max.time()),
+                (models.Assignment.snoozed_until == None) | (models.Assignment.snoozed_until < datetime.now())  # type: ignore
+            ).count()
+            exams=db.query(models.Exam).count()
+            return _ok({"due_week": due_week, "exams": exams, "tasks": db.query(models.Task).filter(models.Task.done==False).count()})
         finally: db.close()
 
     # holidays / academic calendar
@@ -437,6 +456,7 @@ class Api:
         except Exception as e: return _err("validation",str(e))
         db=SessionLocal()
         try: h=models.Holiday(**d.model_dump()); db.add(h); db.commit(); return _ok({"id":h.id})
+        except Exception as e: db.rollback(); return _err("db", str(e))
         finally: db.close()
     def listHolidays(self, _=None):
         db=SessionLocal()
@@ -449,17 +469,21 @@ class Api:
         except Exception as e: return _err("validation",str(e))
         db=SessionLocal()
         try: gl=models.GlobalLink(**d.model_dump()); db.add(gl); db.commit(); return _ok({"id":gl.id})
+        except Exception as e: db.rollback(); return _err("db", str(e))
         finally: db.close()
     def listGlobalLinks(self, _=None):
         db=SessionLocal()
         try: return _ok([{"id":r.id,"label":r.label,"url":r.url,"pinned":r.pinned} for r in db.query(models.GlobalLink).all()])
         finally: db.close()
     def togglePinLink(self, payload: dict):
+        _id = payload.get("id")
+        if not _id: return _err("validation","id required","id")
         db=SessionLocal()
         try:
-            r=db.query(models.GlobalLink).filter(models.GlobalLink.id==payload["id"]).first()
+            r=db.query(models.GlobalLink).filter(models.GlobalLink.id==_id).first()
             if not r: return _err("not_found","link")
             r.pinned=not r.pinned; db.commit(); return _ok({"pinned":r.pinned})
+        except Exception as e: db.rollback(); return _err("db", str(e))
         finally: db.close()
 
     # expenses
@@ -468,6 +492,7 @@ class Api:
         except Exception as e: return _err("validation",str(e))
         db=SessionLocal()
         try: ex=models.Expense(**d.model_dump()); db.add(ex); db.commit(); return _ok({"id":ex.id})
+        except Exception as e: db.rollback(); return _err("db", str(e))
         finally: db.close()
     def listExpenses(self, _=None):
         db=SessionLocal()
@@ -479,10 +504,11 @@ class Api:
 
     # credit progress
     def getCreditProgress(self, _=None):
+        TOTAL_CREDITS = 144
         db=SessionLocal()
         try:
             done=sum(c.credits for c in db.query(models.Course).all())
-            return _ok({"done":done,"total":144,"pct": round(done/144*100,1) if 144 else 0})
+            return _ok({"done":done,"total":TOTAL_CREDITS,"pct": round(done/TOTAL_CREDITS*100,1) if TOTAL_CREDITS else 0})
         finally: db.close()
 
     # CSV import
@@ -494,16 +520,23 @@ class Api:
         reader=csv.DictReader(f)
         db=SessionLocal()
         try:
-            sem=db.query(models.Semester).first()
+            sem=db.query(models.Semester).filter(models.Semester.is_active==True).first() or db.query(models.Semester).first()
             if not sem:
                 sem=models.Semester(name="Imported", start_date=datetime.now().date(), end_date=datetime.now().date()); db.add(sem); db.flush()
-            count=0
+            count=0; seen=set()
             for row in reader:
-                # expect code,name,credits
-                code=row.get("code") or row.get("Code") or ""
-                name=row.get("name") or row.get("Name") or code
-                credits=int(float(row.get("credits") or row.get("Credits") or 3))
+                code=(row.get("code") or row.get("Code") or "").strip()
+                name=(row.get("name") or row.get("Name") or code).strip()
                 if not code: continue
+                if code in seen: continue
+                seen.add(code)
+                try:
+                    credits=int(float(row.get("credits") or row.get("Credits") or 3))
+                except ValueError:
+                    return _err("csv", f"bad credits for {code}", "credits")
+                # dedup against DB
+                if db.query(models.Course).filter(models.Course.semester_id==sem.id, models.Course.code==code).first():
+                    continue
                 db.add(models.Course(semester_id=sem.id, name=name, code=code, credits=credits))
                 count+=1
             db.commit(); return _ok({"imported":count})
