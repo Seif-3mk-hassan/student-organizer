@@ -1,0 +1,11 @@
+#app{display:flex;min-height:100vh}
+#sidebar{width:240px;background:var(--surface);border-right:1px solid var(--border);padding:var(--space-4);position:sticky;top:0;height:100vh}
+#sidebar a{display:block;padding:var(--space-2);border-radius:var(--radius);text-decoration:none;color:var(--text)}
+#sidebar a.active{background:var(--accent);color:#fff}
+#main{flex:1;padding:var(--space-4);max-width:1000px}
+.card{border:1px solid var(--border);border-radius:var(--radius-lg);padding:var(--space-3);background:var(--surface)}
+.row{border-bottom:1px solid var(--border);padding:var(--space-2) 0}
+.empty{border:1px dashed var(--border);padding:var(--space-4);text-align:center;border-radius:var(--radius);color:var(--muted)}
+.banner{background:#fff3cd;border:1px solid #ffe69c;padding:var(--space-2);border-radius:var(--radius)}
+.dot{width:12px;height:12px;border-radius:50%;display:inline-block}
+@media (max-width:1100px){ #sidebar{width:56px;overflow:hidden} #sidebar a span{ display:none } }

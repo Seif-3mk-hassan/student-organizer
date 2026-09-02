@@ -1,0 +1,16 @@
+:root{
+  --bg:#faf9f6; --surface:#fff; --text:#1a1a1a; --muted:#6b6b6b; --border:#e8e6e1;
+  --accent:#0e4d45; --accent-2:#c45a2b; /* forest + rust */
+  --radius:8px; --radius-lg:12px;
+  --space-1:4px; --space-2:8px; --space-3:12px; --space-4:24px; --space-5:32px;
+  --font-heading:"Sora", system-ui, sans-serif;
+  --font-body: Inter, system-ui, sans-serif;
+}
+@media (prefers-color-scheme: dark){
+  :root{ --bg:#0f1110; --surface:#1a1d1c; --text:#f2ede6; --border:#2a2e2d; }
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--text);font-family:var(--font-body);font-size:16px;line-height:1.5}
+h1,h2{font-family:var(--font-heading);font-weight:600;letter-spacing:-.02em}
+a{color:var(--accent)} a:visited{color:#0a3a34}
+button{font:inherit}
