@@ -1,5 +1,5 @@
 """Rotating file logger + Report Bug zip (CEO D3.6 deferred)."""
-import logging, io, zipfile, pathlib, platformdirs
+import logging, logging.handlers, io, zipfile, pathlib, platformdirs
 from datetime import datetime
 
 LOG_DIR = pathlib.Path(platformdirs.user_data_dir("student-organizer", "student-organizer")) / "logs"

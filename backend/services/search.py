@@ -16,13 +16,9 @@ def init_fts():
 
 def index_item(kind: str, ref_id: int, content: str):
     with engine.begin() as c:
-        # replace to avoid bloat on re-index
-        c.execute(text("INSERT OR REPLACE INTO fts_index(rowid, kind, ref_id, content) VALUES ((SELECT rowid FROM fts_index WHERE kind=:k AND ref_id=:r), :k,:r,:c)"),
+        c.execute(text("DELETE FROM fts_index WHERE kind=:k AND ref_id=:r"), {"k": kind, "r": ref_id})
+        c.execute(text("INSERT INTO fts_index(kind, ref_id, content) VALUES (:k,:r,:c)"),
                   {"k": kind, "r": ref_id, "c": content})
-        # fallback: if no rowid match, insert
-        if c.execute(text("SELECT changes()")).scalar() == 0:
-            c.execute(text("INSERT INTO fts_index(kind, ref_id, content) VALUES (:k,:r,:c)"),
-                      {"k": kind, "r": ref_id, "c": content})
 
 def _escape_fts(q: str) -> str:
     # quote and escape FTS5 syntax: wrap in double quotes and double internal quotes
@@ -59,4 +55,5 @@ def parse_quick_add(text: str, known_codes: list[str]) -> dict:
             # next Friday
             delta = (4 - now.weekday()) % 7 or 7
             due = now + timedelta(days=delta)
-    return {"title": title or text, "course_code": code, "due_date": due}
+    # serialize for pywebview JSON (was datetime → crash)
+    return {"title": title or text, "course_code": code, "due_date": due.isoformat() if due else None}

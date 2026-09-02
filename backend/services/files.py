@@ -24,6 +24,8 @@ def save_material(course_id: int, original_filename: str, data: bytes) -> str:
 def resolve_material(rel_path: str) -> Path:
     root = get_materials_root()
     p = (root / rel_path.replace("materials/", "", 1)).resolve()
-    if not str(p).startswith(str(root.resolve())):
+    try:
+        p.relative_to(root.resolve())
+    except ValueError:
         raise ValueError("traversal blocked")
     return p

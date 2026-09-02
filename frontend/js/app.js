@@ -21,6 +21,7 @@ function nav(){
   }));
 }
 
+function esc(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
 function pillFor(a){
   const d=new Date(a.due), today=new Date(); today.setHours(0,0,0,0);
   const diff=Math.round((d - today)/86400000);
@@ -52,7 +53,7 @@ async function renderDashboard(){
         <div>${todo.length? todo.slice(0,8).map(a=>`
           <div class=row>
             <div style="min-width:0;flex:1">
-              <div style="font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${a.title}</div>
+              <div style="font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(a.title)}</div>
               <div style="font-size:13px;color:var(--muted)">${new Date(a.due).toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})} · <a href="#" data-cid="${a.course_id}" style="font-size:12px">view</a></div>
             </div>
             <div style="display:flex;gap:6px;align-items:center">
@@ -100,7 +101,7 @@ async function renderCourses(){
     const cs=await call("listCourses",{semester_id:sid});
     document.getElementById("list").innerHTML = cs.length? cs.map(c=>`
       <div class=row style="flex-wrap:wrap;gap:8px">
-        <span class=dot style=background:var(--accent)></span> <b>${c.code}</b> — ${c.name} (${c.credits} cr)
+        <span class=dot style=background:var(--accent)></span> <b>${esc(c.code)}</b> — ${esc(c.name)} (${c.credits} cr)
         <span style="flex:1"></span>
         <input id="g-${c.id}-name" placeholder="Item e.g. Midterm" style="width:130px;padding:6px;border:1px solid var(--border);border-radius:6px">
         <input id="g-${c.id}-score" type=number placeholder="85" style="width:60px;padding:6px;border:1px solid var(--border);border-radius:6px">
