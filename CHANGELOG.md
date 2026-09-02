@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.0] - 2026-09-02
+
+### Added
+- Exams with countdown, Tasks + Pomodoro 25:00 + progress/streak, Digest This week, Snooze ?
+- Timetable weekly grid 08-20 with overlap banner, Holidays, Global links pin, Expenses tracker
+- CSV import (dedup, active semester), Credit 144 progress, Files/Notes UIs, Attendance cap
+- Auto-migrate existing DB (allowed_absences, snoozed_until + 4 tables)
+
+### Fixed
+- Review was cancelled (no findings) — prior high/high2/design fixes already landed in 0.2.2
+- feat branch now 10 commits ahead of main
 ## [0.2.2] - 2026-09-02
 
 ### Fixed
