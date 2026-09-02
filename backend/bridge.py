@@ -130,7 +130,6 @@ class Api:
         except Exception as e: return _err("validation", str(e))
         db = SessionLocal()
         try:
-            # overlap check
             overlap = db.query(models.TimetableSlot).filter(
                 models.TimetableSlot.day_of_week == d.day_of_week,
                 models.TimetableSlot.start_time < d.end_time,
@@ -143,6 +142,28 @@ class Api:
             return _ok({"id": s.id})
         except Exception as e:
             db.rollback(); return _err("db", str(e))
+        finally: db.close()
+
+    def listSlots(self, _=None):
+        db = SessionLocal()
+        try:
+            rows = db.query(models.TimetableSlot).all()
+            # join course for label
+            out=[]
+            for r in rows:
+                c = db.query(models.Course).filter(models.Course.id==r.course_id).first()
+                out.append({"id":r.id,"course_id":r.course_id,"code":c.code if c else "?", "name":c.name if c else "?", "day":r.day_of_week,"start":r.start_time.isoformat()[:5],"end":r.end_time.isoformat()[:5],"room":r.room})
+            return _ok(out)
+        finally: db.close()
+
+    def deleteSlot(self, payload: dict):
+        db = SessionLocal()
+        try:
+            r = db.query(models.TimetableSlot).filter(models.TimetableSlot.id==payload["id"]).first()
+            if not r: return _err("not_found","slot not found")
+            db.delete(r); db.commit(); return _ok({})
+        except Exception as e:
+            db.rollback(); return _err("db",str(e))
         finally: db.close()
 
     # grades + gpa

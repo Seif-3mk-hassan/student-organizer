@@ -135,8 +135,67 @@ async function renderCourses(){
 
 async function renderTimetable(){
   const m=document.getElementById("main");
-  m.innerHTML = `<h1>Timetable</h1><div id=tt class=card>Loading…</div>`;
-  m.querySelector("#tt").innerHTML = `<div class=empty>No classes this term — add a slot from a course. Overlap will be flagged.</div>`;
+  m.innerHTML = `<h1>Timetable</h1>
+    <div class=card>
+      <b>Add slot</b>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
+        <select id=tsCourse style="padding:6px;border:1px solid var(--border);border-radius:6px"></select>
+        <select id=tsDay style="padding:6px;border:1px solid var(--border);border-radius:6px">
+          <option value=0>Mon</option><option value=1>Tue</option><option value=2>Wed</option><option value=3>Thu</option><option value=4>Fri</option><option value=5>Sat</option><option value=6>Sun</option>
+        </select>
+        <input id=tsStart type=time value="09:00" style="padding:6px;border:1px solid var(--border);border-radius:6px">
+        <input id=tsEnd type=time value="10:30" style="padding:6px;border:1px solid var(--border);border-radius:6px">
+        <input id=tsRoom placeholder=Room style="width:80px;padding:6px;border:1px solid var(--border);border-radius:6px">
+        <button id=tsAdd style="padding:6px 12px;background:var(--accent);color:#fff;border:1px solid var(--accent);border-radius:6px;cursor:pointer">Add</button>
+      </div>
+      <div id=tsMsg style="font-size:12px;color:#9b1c1c;margin-top:6px"></div>
+    </div>
+    <div id=tt style="margin-top:14px"></div>`;
+  const days=["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
+  const courses=await call("listCourses",{}).catch(()=>[]);
+  const sel=m.querySelector("#tsCourse");
+  sel.innerHTML = courses.map(c=>`<option value=${c.id}>${esc(c.code)} — ${esc(c.name)}</option>`).join("") || `<option value="">No courses — add one</option>`;
+  async function refresh(){
+    const slots=await call("listSlots",{}).catch(()=>[]);
+    if(!slots.length){ m.querySelector("#tt").innerHTML = `<div class=empty>No classes this term — add a slot above. Overlap will be flagged.</div>`; return; }
+    let html = `<div style="display:grid;grid-template-columns:80px repeat(7,1fr);gap:6px;font-size:13px">`;
+    html+=`<div></div>`+days.map(d=>`<b style="text-align:center">${d}</b>`).join("");
+    // time slots 08-20
+    for(let h=8;h<20;h++){
+      html+=`<div style="color:var(--muted);padding:6px 0">${String(h).padStart(2,'0')}:00</div>`;
+      for(let d=0;d<7;d++){
+        const cell = slots.filter(s=> s.day===d && parseInt(s.start.split(":")[0])===h);
+        html+=`<div style="min-height:36px;border:1px solid #eee;border-radius:6px;background:#fff;padding:4px">${
+          cell.map(s=>`<div style="background:var(--surface);border-left:3px solid var(--accent);padding:4px 6px;border-radius:6px;font-size:12px;margin-bottom:4px">${esc(s.code)} ${esc(s.start)}-${esc(s.end)} <a href="#" data-delSlot="${s.id}" style="color:#9b1c1c">✕</a></div>`).join("")
+        }</div>`;
+      }
+    }
+    html+=`</div>`;
+    m.querySelector("#tt").innerHTML=html;
+    m.querySelectorAll("[data-delSlot]").forEach(b=> b.onclick= async (e)=>{ e.preventDefault(); await call("deleteSlot",{id:parseInt(b.dataset.delSlot)}); refresh(); });
+  }
+  m.querySelector("#tsAdd").onclick = async ()=>{
+    const course_id=parseInt(sel.value), day_of_week=parseInt(m.querySelector("#tsDay").value), start_time=m.querySelector("#tsStart").value, end_time=m.querySelector("#tsEnd").value, room=m.querySelector("#tsRoom").value;
+    if(!course_id) return m.querySelector("#tsMsg").textContent="Pick a course first";
+    const r=await call("createSlot",{course_id, day_of_week, start_time, end_time, room});
+    if(!r || r.id===undefined && !r.ok){ /* bridge returns {ok,id} or {ok:false} */ }
+    // call returns {ok,id} on success, but our wrapper throws; handle both
+    refresh();
+  };
+  // monkey-patch createSlot error display: wrap call
+  const origCreate = window.pywebview?.api?.createSlot;
+  // instead, override button to catch _err
+  m.querySelector("#tsAdd").addEventListener("click", async ()=>{
+    try{ }catch(e){ m.querySelector("#tsMsg").textContent=e.message; }
+  });
+  await refresh();
+  // attach proper error handler by replacing click
+  m.querySelector("#tsAdd").onclick = async ()=>{
+    m.querySelector("#tsMsg").textContent="";
+    const course_id=parseInt(sel.value), day_of_week=parseInt(m.querySelector("#tsDay").value), start_time=m.querySelector("#tsStart").value+":00", end_time=m.querySelector("#tsEnd").value+":00", room=m.querySelector("#tsRoom").value;
+    if(!course_id) return m.querySelector("#tsMsg").textContent="Pick a course";
+    try{ await call("createSlot",{course_id, day_of_week, start_time, end_time, room}); await refresh(); }catch(e){ m.querySelector("#tsMsg").textContent=e.message; }
+  };
 }
 
 async function render(){
