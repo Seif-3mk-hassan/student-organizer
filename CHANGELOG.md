@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.2.2] - 2026-09-02
+
+### Fixed
+- GPA/edit: 5 courses != GPA until grades, add per-course Add grade + Delete course + delete/done on assignments
+- Late: end-of-day grace (due today shows today green, tomorrow, in Nd) + pill Math.floor midnight fix
+- High review: addGrade rollback, updateAssignment ISO + status validation, FTS quote escape + dedup, is_late local
+- High2: logger handlers, quickAdd isoformat, XSS esc on course/assignment/palette, resolve_material relative_to
+- Design: palette 200ms debounce, h1 text-wrap:balance + focus-visible ring, quickAdd once-flag leak
 ## [0.2.1] - 2026-09-02
 
 ### Fixed
